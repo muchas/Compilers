@@ -14,7 +14,6 @@ class Scanner(object):
 
   def build(self):
       self.lexer = lex.lex(object=self)
-      import pdb; pdb.set_trace()
 
   def input(self, text):
       self.lexer.input(text)
@@ -100,6 +99,3 @@ class Scanner(object):
       r"[a-zA-Z_]\w*"
       t.type = Scanner.reserved.get(t.value, 'ID')
       return t
-  
-  
-  
