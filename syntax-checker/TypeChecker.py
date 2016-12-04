@@ -1,8 +1,16 @@
 #!/usr/bin/python
+from collections import defaultdict
+
 import AST
 
 
 class NodeVisitor(object):
+
+    def __init__(self):
+        self.ttype = defaultdict(lambda: defaultdict(dict))
+        self.ttype['+']['int']['float'] = 'float'
+        self.ttype['*']['string']['int'] = 'string'
+        self.ttype['>']['string']['string'] = 'int'
 
     def visit(self, node):
         method = 'visit_' + node.__class__.__name__
@@ -21,6 +29,9 @@ class NodeVisitor(object):
                             self.visit(item)
                 elif isinstance(child, AST.Node):
                     self.visit(child)
+
+    def get_type(self, operator, type1, type2):
+        return self.ttype[operator][type1][type2]
 
     # simpler version of generic_visit, not so general
     #def generic_visit(self, node):
