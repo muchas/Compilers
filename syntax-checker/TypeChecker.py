@@ -7,10 +7,31 @@ import AST
 class NodeVisitor(object):
 
     def __init__(self):
-        self.ttype = defaultdict(lambda: defaultdict(dict))
-        self.ttype['+']['int']['float'] = 'float'
-        self.ttype['*']['string']['int'] = 'string'
-        self.ttype['>']['string']['string'] = 'int'
+        self.ttype = self.init_ttype()
+
+    def init_ttype(self):
+        ttype = defaultdict(lambda: defaultdict(dict))
+
+        for op in ['+', '-', '*', '/', '%', '<', '>', '<<', '>>', '|', '&', '^', '<=', '>=', '==', '!=']:
+            ttype[op]['int']['int'] = 'int'
+
+        for op in ['+', '-', '*', '/']:
+            ttype[op]['int']['float'] = 'float'
+            ttype[op]['float']['int'] = 'float'
+            ttype[op]['float']['float'] = 'float'
+
+        for op in ['<', '>', '<=', '>=', '==', '!=']:
+            ttype[op]['int']['float'] = 'int'
+            ttype[op]['float']['int'] = 'int'
+            ttype[op]['float']['float'] = 'int'
+
+        ttype['+']['string']['string'] = 'string'
+        ttype['*']['string']['int'] = 'string'
+
+        for op in ['<', '>', '<=', '>=', '==', '!=']:
+            ttype[op]['string']['string'] = 'int'
+
+        return ttype
 
     def visit(self, node):
         method = 'visit_' + node.__class__.__name__
