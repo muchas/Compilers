@@ -46,6 +46,10 @@ class BinExpr(Node):
         self.op = op
         self.right = right
 
+        # if you want to use somewhere generic_visit method instead of visit_XXX in visitor
+        # definition of children field is required in each class from AST
+        self.children = (left, right)
+
 
 class ExpressionList(NodeList):
     pass
