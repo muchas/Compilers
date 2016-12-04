@@ -4,7 +4,6 @@ import ply.yacc as yacc
 from Cparser import Cparser
 from TreePrinter import TreePrinter
 
-
 if __name__ == '__main__':
 
     try:
@@ -17,4 +16,3 @@ if __name__ == '__main__':
     Cparser = Cparser()
     parser = yacc.yacc(module=Cparser)
     text = file.read()
-    ast = parser.parse(text, lexer=Cparser.scanner)
