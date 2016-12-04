@@ -3,36 +3,25 @@ from symtable import Symbol
 
 
 class VariableSymbol(Symbol):
-
     def __init__(self, name, type):
-        pass
-    #
+        self.name = name
+        self.type = type
 
 
 class SymbolTable(object):
+    def __init__(self, parent, name):  # parent scope and symbol table name
+        self.parent = parent
+        self.name = name
+        self.symbols = {}
 
-    def __init__(self, parent, name): # parent scope and symbol table name
-        pass
-    #
+    def put(self, name, symbol):  # put variable symbol or fundef under <name> entry
+        self.symbols[name] = symbol
 
-    def put(self, name, symbol): # put variable symbol or fundef under <name> entry
-        pass
-    #
+    def get(self, name):  # get variable symbol or fundef from <name> entry
+        if name in self.symbols:
+            return self.symbols
 
-    def get(self, name): # get variable symbol or fundef from <name> entry
-        pass
-    #
+        if self.parent is not None:
+            return self.parent.get(name)
 
-    def getParentScope(self):
-        pass
-    #
-
-    def pushScope(self, name):
-        pass
-    #
-
-    def popScope(self):
-        pass
-    #
-
-
+        return None
