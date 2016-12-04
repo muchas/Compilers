@@ -19,7 +19,7 @@ class SymbolTable(object):
 
     def get(self, name):  # get variable symbol or fundef from <name> entry
         if name in self.symbols:
-            return self.symbols
+            return self.symbols[name]
 
         if self.parent is not None:
             return self.parent.get(name)
