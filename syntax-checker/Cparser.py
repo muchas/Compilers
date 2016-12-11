@@ -115,7 +115,7 @@ class Cparser(object):
         """print_instr : PRINT expr_list ';'
                        | PRINT error ';' """
         expr = p[2]
-        p[0] = AST.PrintInstruction(expr)
+        p[0] = AST.PrintInstruction(p.lineno, expr)
 
     def p_labeled_instr(self, p):
         """labeled_instr : ID ':' instruction """
@@ -127,7 +127,7 @@ class Cparser(object):
         """assignment : ID '=' expression ';' """
         id = p[1]
         expr = p[3]
-        p[0] = AST.AssignmentInstruction(id, expr)
+        p[0] = AST.AssignmentInstruction(p.lineno, id, expr)
 
     def p_choice_instr(self, p):
         """choice_instr : IF '(' condition ')' instruction  %prec IFX
@@ -155,7 +155,7 @@ class Cparser(object):
     def p_return_instr(self, p):
         """return_instr : RETURN expression ';' """
         expression = p[2]
-        p[0] = AST.ReturnInstruction(expression)
+        p[0] = AST.ReturnInstruction(p.lineno, expression)
 
     def p_continue_instr(self, p):
         """continue_instr : CONTINUE ';' """
@@ -209,11 +209,11 @@ class Cparser(object):
                       | ID '(' error ')' """
         if len(p) == 2:
             value = p[1]
-            p[0] = AST.Const(value)
+            p[0] = AST.Const(p.lineno, value)
         elif p[2] == "(" and p[1] != "(":
             funcName = p[1]
             args = p[3]
-            p[0] = AST.InvocationExpression(funcName, args)
+            p[0] = AST.InvocationExpression(p.lineno, funcName, args)
         elif p[1] == "(":
             interior = p[2]
             p[0] = AST.GroupedExpression(interior)
@@ -221,7 +221,7 @@ class Cparser(object):
             left = p[1]
             op = p[2]
             right = p[3]
-            p[0] = AST.BinExpr(left, op, right)
+            p[0] = AST.BinExpr(p.lineno, left, op, right)
 
     def p_expr_list(self, p):
         """expr_list : expr_list ',' expression
@@ -261,4 +261,4 @@ class Cparser(object):
         """arg : TYPE ID """
         type = p[1]
         name = p[2]
-        p[0] = AST.Argument(type, name)
+        p[0] = AST.Argument(p.lineno, type, name)
