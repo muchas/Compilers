@@ -228,7 +228,7 @@ class Cparser(object):
             left = p[1]
             op = p[2]
             right = p[3]
-            p[0] = AST.BinExpr(p.lineno(1), left, op, right)
+            p[0] = AST.BinExpr(p.lineno(2), left, op, right)
 
     def p_expr_list(self, p):
         """expr_list : expr_list ',' expression
