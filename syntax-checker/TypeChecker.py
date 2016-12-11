@@ -113,8 +113,7 @@ class TypeChecker(NodeVisitor):
             return symbol.type
         elif expression_type != symbol.type:
             print "Bad assignment of {} to {} in line {}.".format(expression_type, symbol.type, node.line)
-
-        return symbol.type
+            return symbol.type
 
     def visit_GroupedExpression(self, node):
         return self.visit(node.interior)
