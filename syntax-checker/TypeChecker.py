@@ -1,6 +1,6 @@
 #!/usr/bin/python
 from collections import defaultdict
-from symtable import SymbolTable
+from SymbolTable import SymbolTable, FunctionSymbol, VariableSymbol
 
 import AST
 
@@ -71,9 +71,11 @@ class TypeChecker(NodeVisitor):
         super(TypeChecker, self).__init__()
 
         self.table = SymbolTable(None, 'root')
+        self.current_function = None
+        self.current_type = None
 
     def visit_Integer(self, node):
-            return 'int'
+        return 'int'
 
     def visit_Float(self, node):
         return 'float'
@@ -84,15 +86,157 @@ class TypeChecker(NodeVisitor):
     def visit_BinExpr(self, node):
         type_left = self.visit(node.left)
         type_right = self.visit(node.right)
-        op = node.op
+        operator = node.op
 
-        type = self.get_type(op, type_left, type_right)
+        result_type = self.get_type(operator, type_left, type_right)
 
-        if type is None:
-            print "Bad expression {} in line {}".format(node.op, node.line)
+        if result_type is not None:
+            return result_type
 
-        return type
+        print "Bad expression {} in line {}".format(node.op, node.line)
 
-    def visit_RelExpr(self, node):
-        type1 = self.visit(node.left)
-        type2 = self.visit(node.right)
+    def visit_Variable(self, node):
+        symbol = self.table.get(node.name)
+
+        if symbol is not None:
+            return symbol.type
+
+        print "Undefined symbol {} in line {}".format(node.name, node.line)
+
+    def visit_AssignmentInstruction(self, node):
+        symbol = self.table.get(node.id)
+        expression_type = self.visit(node.expr)
+
+        if symbol is None:
+            print "Used undefined symbol {} in line {}".format(node.id, node.line)
+        elif symbol.type == "float" and expression_type == "int":
+            return symbol.type
+        elif expression_type != symbol.type:
+            print "Bad assignment of {} to {} in line {}.".format(expression_type, symbol.type, node.line)
+
+        return symbol.type
+
+    def visit_GroupedExpression(self, node):
+        return self.visit(node.interior)
+
+    def visit_FunctionExpression(self, node):
+        if self.table.symbols.get(node.name):
+            print "Function {} already defined. Line: {}".format(node.name, node.line)
+        else:
+            function = FunctionSymbol(node.name, node.retType)
+            self.table.put(node.name, function)
+
+            self.table = self.table.push_scope(node.name)
+            self.current_function = function
+
+            if node.args is not None:
+                self.visit(node.args)
+            self.visit(node.body)
+
+            self.current_function = None
+            self.table = self.table.pop_scope()
+
+    def visit_CompoundInstruction(self, node):
+        self.table = self.table.push_scope("inner_scope")
+
+        if node.declarations is not None:
+            self.visit(node.declarations)
+        self.visit(node.instructions)
+
+        self.table = self.table.pop_scope()
+
+    def visit_ArgumentList(self, node):
+        for arg in node.children:
+            self.visit(arg)
+
+        self.current_function.params = [x.type for x in self.table.symbols.values()]
+
+    def visit_Argument(self, node):
+        if self.table.symbols.get(node.name) is not None:
+            print "Argument {} already defined. Line: {}".format(node.name, node.line)
+        else:
+            self.table.put(node.name, VariableSymbol(node.name, node.type))
+
+    def visit_InvocationExpression(self, node):
+        function_symbol = self.table.get(node.name)
+
+        if function_symbol is None or not isinstance(function_symbol, FunctionSymbol):
+            print "Function {} not defined. Line: {}".format(node.name, node.line)
+        else:
+            if len(node.args) != len(function_symbol.params):
+                print "Invalid number of arguments in line {}. Expected {}".\
+                    format(node.line, len(function_symbol.params))
+            else:
+                types = [self.visit(x) for x in node.args.children]
+
+                for actual, expected in zip(types, function_symbol.params):
+                    if actual != expected and not (actual == "int" and expected == "float"):
+                        print "Mismatching argument types in line {}. Expected {}, got {}".\
+                            format(node.line, expected, actual)
+
+            return function_symbol.type
+
+    def visit_ChoiceInstruction(self, node):
+        self.visit(node.condition)
+        self.visit(node.action)
+
+        if node.alternateAction is not None:
+            self.visit(node.alternateAction)
+
+    def visit_WhileInstruction(self, node):
+        self.visit(node.condition)
+        self.visit(node.instruction)
+
+    def visit_RepeatInstruction(self, node):
+        self.visit(node.condition)
+        self.visit(node.instructions)
+
+    def visit_ReturnInstruction(self, node):
+        if self.current_function is not None:
+            expression_type = self.visit(node.expression)
+
+            if self.current_function.type == 'float' and expression_type == 'int':
+                return self.current_function.type
+
+            if expression_type != self.current_function.type:
+                print "Invalid return type of {} in line {}. Expected {}".format(expression_type, node.line,
+                                                                                 self.current_function.type)
+            return expression_type
+
+        print "Return placed outside of a function in line {}".format(node.line)
+
+    def visit_Declaration(self, node):
+        self.current_type = node.type
+        self.visit(node.inits)
+        self.current_type = None
+
+    def visit_Init(self, node):
+        expression_type = self.visit(node.expr)
+
+        if (expression_type == self.current_type or
+                (expression_type == "int" and self.current_type == "float") or
+                (expression_type == "float" and self.current_type == "int")):
+
+            if self.table.symbols.get(node.name) is not None:
+                print "Invalid definition of {} in line: {}. Entity redefined".\
+                    format(node.name, node.line)
+            else:
+                self.table.put(node.name, VariableSymbol(node.name, self.current_type))
+        else:
+            print "Bad assignment of {} to {} in line {}".format(expression_type, self.current_type, node.line)
+
+    def visit_PrintInstruction(self, node):
+        self.visit(node.expr)
+
+    def visit_LabeledInstruction(self, node):
+        self.visit(node.instr)
+
+    def visit_Program(self, node):
+        self.visit(node.program_blocks)
+
+    def visit_ProgramBlockList(self, node):
+        for program_block in node.children:
+            self.visit(program_block)
+
+    def visit_ProgramBlock(self, node):
+        self.visit(node.block)

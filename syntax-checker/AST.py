@@ -34,7 +34,9 @@ class String(Const):
 
 
 class Variable(Node):
-    pass
+    def __init__(self, line, name):
+        self.line = line
+        self.name = name
 
 
 class BinExpr(Node):
