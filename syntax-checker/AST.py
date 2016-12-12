@@ -14,6 +14,9 @@ class NodeList(Node):
     def append(self, child):
         self.children.append(child)
 
+    def __len__(self):
+        return len(self.children)
+
 
 class Const(Node):
     def __init__(self, line, value):
@@ -34,7 +37,9 @@ class String(Const):
 
 
 class Variable(Node):
-    pass
+    def __init__(self, line, name):
+        self.line = line
+        self.name = name
 
 
 class BinExpr(Node):
@@ -66,12 +71,8 @@ class FunctionExpression(Node):
         self.body = body
 
 
-class DeclarationList(Node):
-    def __init__(self):
-        self.declarations = []
-
-    def append(self, declaration):
-        self.declarations.append(declaration)
+class DeclarationList(NodeList):
+    pass
 
 
 class Declaration(Node):
