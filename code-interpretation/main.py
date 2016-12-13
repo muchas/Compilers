@@ -1,9 +1,8 @@
-
 import sys
 import ply.yacc as yacc
 from Cparser import Cparser
-from TreePrinter import TreePrinter
 from TypeChecker import TypeChecker
+from Interpreter import Interpreter
 
 if __name__ == '__main__':
 
@@ -19,5 +18,15 @@ if __name__ == '__main__':
     text = file.read()
 
     ast = parser.parse(text, lexer=Cparser.scanner)
-    typeChecker = TypeChecker()
-    typeChecker.visit(ast)
+
+    if ast:
+        typeChecker = TypeChecker()
+        typeChecker.visit(ast)
+        if typeChecker.isValid:
+            print "Type check finished"
+            ast.accept(Interpreter())
+            print "Interpretation finished"
+        else:
+            sys.stderr.write("Type check failed -> no interpretation")
+    else:
+        sys.stderr.write("Syntax check failed -> no type check & interpretation")

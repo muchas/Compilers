@@ -1,12 +1,9 @@
 #!/usr/bin/python
 from collections import defaultdict
 from SymbolTable import SymbolTable, FunctionSymbol, VariableSymbol
-
 import AST
 
-
 class NodeVisitor(object):
-
     def __init__(self):
         self.ttype = self.init_ttype()
 
@@ -39,7 +36,7 @@ class NodeVisitor(object):
         visitor = getattr(self, method, self.generic_visit)
         return visitor(node)
 
-    def generic_visit(self, node):        # Called if no explicit visitor function exists for a node.
+    def generic_visit(self, node):  # Called if no explicit visitor function exists for a node.
         if isinstance(node, list):
             for elem in node:
                 self.visit(elem)
@@ -66,13 +63,13 @@ class NodeVisitor(object):
 
 
 class TypeChecker(NodeVisitor):
-
     def __init__(self):
         super(TypeChecker, self).__init__()
 
         self.table = SymbolTable(None, 'root')
         self.current_function = None
         self.current_type = None
+        self.isValid = True
 
     def visit_Integer(self, node):
         return 'int'
@@ -90,50 +87,55 @@ class TypeChecker(NodeVisitor):
 
         result_type = self.get_type(operator, type_left, type_right)
 
-        if result_type is not None:
-            return result_type
+        if result_type is None:
+            return self.raiseItKanaKana("Bad expression {} in line {}".format(node.op, node.line))
 
-        print "Bad expression {} in line {}".format(node.op, node.line)
+        return result_type
 
     def visit_Variable(self, node):
         symbol = self.table.get(node.name)
 
-        if symbol is not None:
-            return symbol.type
+        if symbol is None:
+            return self.raiseItKanaKana("Undefined symbol {} in line {}".format(node.name, node.line))
 
-        print "Undefined symbol {} in line {}".format(node.name, node.line)
+        return symbol.type
 
     def visit_AssignmentInstruction(self, node):
         symbol = self.table.get(node.id)
         expression_type = self.visit(node.expr)
 
         if symbol is None:
-            print "Used undefined symbol {} in line {}".format(node.id, node.line)
-        elif symbol.type == "float" and expression_type == "int":
+            return self.raiseItKanaKana("Used undefined symbol {} in line {}".format(node.id, node.line))
+
+        if symbol.type == "float" and expression_type == "int":
             return symbol.type
-        elif expression_type != symbol.type:
-            print "Bad assignment of {} to {} in line {}.".format(expression_type, symbol.type, node.line)
-            return symbol.type
+
+        if expression_type != symbol.type:
+            return self.raiseItKanaKana(
+                "Bad assignment of {} to {} in line {}.".format(expression_type, symbol.type, node.line)
+            )
+
+        return symbol.type
 
     def visit_GroupedExpression(self, node):
         return self.visit(node.interior)
 
     def visit_FunctionExpression(self, node):
         if self.table.symbols.get(node.name):
-            print "Function {} already defined. Line: {}".format(node.name, node.line)
-        else:
-            function = FunctionSymbol(node.name, node.retType)
-            self.table.put(node.name, function)
+            return self.raiseItKanaKana("Function {} already defined. Line: {}".format(node.name, node.line))
 
-            self.table = self.table.push_scope(node.name)
-            self.current_function = function
+        function = FunctionSymbol(node.name, node.retType)
+        self.table.put(node.name, function)
 
-            if node.args is not None:
-                self.visit(node.args)
-            self.visit(node.body)
+        self.table = self.table.push_scope(node.name)
+        self.current_function = function
 
-            self.current_function = None
-            self.table = self.table.pop_scope()
+        if node.args is not None:
+            self.visit(node.args)
+        self.visit(node.body)
+
+        self.current_function = None
+        self.table = self.table.pop_scope()
 
     def visit_CompoundInstruction(self, node):
         self.table = self.table.push_scope("inner_scope")
@@ -152,28 +154,30 @@ class TypeChecker(NodeVisitor):
 
     def visit_Argument(self, node):
         if self.table.symbols.get(node.name) is not None:
-            print "Argument {} already defined. Line: {}".format(node.name, node.line)
-        else:
-            self.table.put(node.name, VariableSymbol(node.name, node.type))
+            return self.raiseItKanaKana("Argument {} already defined. Line: {}".format(node.name, node.line))
+
+        self.table.put(node.name, VariableSymbol(node.name, node.type))
 
     def visit_InvocationExpression(self, node):
         function_symbol = self.table.get(node.name)
 
         if function_symbol is None or not isinstance(function_symbol, FunctionSymbol):
-            print "Function {} not defined. Line: {}".format(node.name, node.line)
-        else:
-            if len(node.args) != len(function_symbol.params):
-                print "Invalid number of arguments in line {}. Expected {}".\
-                    format(node.line, len(function_symbol.params))
-            else:
-                types = [self.visit(x) for x in node.args.children]
+            return self.raiseItKanaKana("Function {} not defined. Line: {}".format(node.name, node.line))
 
-                for actual, expected in zip(types, function_symbol.params):
-                    if actual != expected and not (actual == "int" and expected == "float"):
-                        print "Mismatching argument types in line {}. Expected {}, got {}".\
-                            format(node.line, expected, actual)
+        if len(node.args) != len(function_symbol.params):
+            return self.raiseItKanaKana(
+                "Invalid number of arguments in line {}. Expected {}".format(node.line, len(function_symbol.params))
+            )
 
-            return function_symbol.type
+        types = [self.visit(x) for x in node.args.children]
+
+        for actual, expected in zip(types, function_symbol.params):
+            if actual != expected and not (actual == "int" and expected == "float"):
+                return self.raiseItKanaKana(
+                    "Mismatching argument types in line {}. Expected {}, got {}".format(node.line, expected, actual)
+                )
+
+        return function_symbol.type
 
     def visit_ChoiceInstruction(self, node):
         self.visit(node.condition)
@@ -198,11 +202,14 @@ class TypeChecker(NodeVisitor):
                 return self.current_function.type
 
             if expression_type != self.current_function.type:
-                print "Invalid return type of {} in line {}. Expected {}".format(expression_type, node.line,
-                                                                                 self.current_function.type)
+                return self.raiseItKanaKana(
+                    "Invalid return type of {} in line {}. Expected {}". \
+                        format(expression_type, node.line, self.current_function.type)
+                )
+
             return expression_type
 
-        print "Return placed outside of a function in line {}".format(node.line)
+        self.raiseItKanaKana("Return placed outside of a function in line {}".format(node.line))
 
     def visit_Declaration(self, node):
         self.current_type = node.type
@@ -217,12 +224,15 @@ class TypeChecker(NodeVisitor):
                 (expression_type == "float" and self.current_type == "int")):
 
             if self.table.symbols.get(node.name) is not None:
-                print "Invalid definition of {} in line: {}. Entity redefined".\
-                    format(node.name, node.line)
-            else:
-                self.table.put(node.name, VariableSymbol(node.name, self.current_type))
+                return self.raiseItKanaKana(
+                    "Invalid definition of {} in line: {}. Entity redefined".format(node.name, node.line)
+                )
+
+            self.table.put(node.name, VariableSymbol(node.name, self.current_type))
         else:
-            print "Bad assignment of {} to {} in line {}".format(expression_type, self.current_type, node.line)
+            return self.raiseItKanaKana(
+                "Bad assignment of {} to {} in line {}".format(expression_type, self.current_type, node.line)
+            )
 
     def visit_PrintInstruction(self, node):
         self.visit(node.expr)
@@ -239,3 +249,7 @@ class TypeChecker(NodeVisitor):
 
     def visit_ProgramBlock(self, node):
         self.visit(node.block)
+
+    def raiseItKanaKana(self, msg):
+        self.isValid = False
+        print msg
