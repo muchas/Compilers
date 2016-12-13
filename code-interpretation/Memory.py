@@ -31,3 +31,7 @@ class MemoryStack(object):
 
     def pop(self):
         return self.stack.pop()
+
+    @property
+    def head(self):
+        return self.stack[-1]

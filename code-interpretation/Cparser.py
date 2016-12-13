@@ -112,7 +112,7 @@ class Cparser(object):
         p[0] = p[1]
 
     def p_print_instr(self, p):
-        """print_instr : PRINT expr_list ';'
+        """print_instr : PRINT expression ';'
                        | PRINT error ';' """
         expr = p[2]
         p[0] = AST.PrintInstruction(p.lineno(1), expr)
@@ -167,10 +167,7 @@ class Cparser(object):
 
     def p_compound_instr(self, p):
         """compound_instr : '{' declarations instructions '}' """
-        if len(p[2].children) == 0:
-            p[0] = AST.CompoundInstruction(None, p[3])
-        else:
-            p[0] = AST.CompoundInstruction(p[2], p[3])
+        p[0] = AST.CompoundInstruction(p[2], p[3])
 
     def p_condition(self, p):
         """condition : expression"""

@@ -22,7 +22,7 @@ if __name__ == '__main__':
     if ast:
         typeChecker = TypeChecker()
         typeChecker.visit(ast)
-        if typeChecker.isValid:
+        if typeChecker.is_valid:
             print "Type check finished"
             ast.accept(Interpreter())
             print "Interpretation finished"

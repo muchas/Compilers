@@ -40,7 +40,7 @@ class NodeVisitor(object):
         if isinstance(node, list):
             for elem in node:
                 self.visit(elem)
-        else:
+        elif hasattr(node, "children"):
             for child in node.children:
                 if isinstance(child, list):
                     for item in child:
@@ -69,7 +69,7 @@ class TypeChecker(NodeVisitor):
         self.table = SymbolTable(None, 'root')
         self.current_function = None
         self.current_type = None
-        self.isValid = True
+        self.is_valid = True
 
     def visit_Integer(self, node):
         return 'int'
@@ -251,5 +251,5 @@ class TypeChecker(NodeVisitor):
         self.visit(node.block)
 
     def raiseItKanaKana(self, msg):
-        self.isValid = False
+        self.is_valid = False
         print msg
