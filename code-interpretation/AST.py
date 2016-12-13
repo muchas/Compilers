@@ -1,8 +1,7 @@
 
 class Node(object):
-
-    def __str__(self):
-        return self.printTree()
+    def accept(self, visitor):
+        return visitor.visit(self)
 
 
 class NodeList(Node):
@@ -67,7 +66,7 @@ class FunctionExpression(Node):
     def __init__(self, retType, name, args, body):
         self.retType = retType
         self.name = name
-        self.args = args
+        self.args = args if args else ArgumentList()
         self.body = body
 
 
@@ -85,7 +84,7 @@ class InvocationExpression(Node):
     def __init__(self, line, name, args):
         self.line = line
         self.name = name
-        self.args = args
+        self.args = args if args else ArgumentList()
 
 
 class Argument(Node):
