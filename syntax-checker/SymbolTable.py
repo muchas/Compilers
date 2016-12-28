@@ -9,10 +9,10 @@ class VariableSymbol(Symbol):
 
 
 class FunctionSymbol(Symbol):
-    def __init__(self, name, type):
+    def __init__(self, name, type, args):
         self.name = name
         self.type = type
-        self.params = []
+        self.args = args
 
 
 class SymbolTable(object):
@@ -23,6 +23,15 @@ class SymbolTable(object):
 
     def put(self, name, symbol):
         self.symbols[name] = symbol
+
+    def has_scope_name(self, name):
+        if self.name == name:
+            return True
+
+        if self.parent:
+            return self.parent.has_scope_name(name)
+
+        return False
 
     def get(self, name):
         return self.symbols.get(name, self.parent.get(name) if self.parent else None)

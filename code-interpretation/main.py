@@ -7,7 +7,7 @@ from Interpreter import Interpreter
 if __name__ == '__main__':
 
     try:
-        filename = sys.argv[1] if len(sys.argv) > 1 else "example.txt"
+        filename = sys.argv[1] if len(sys.argv) > 1 else "tests/fib.in"
         file = open(filename, "r")
     except IOError:
         print("Cannot open {0} file".format(filename))
@@ -23,9 +23,7 @@ if __name__ == '__main__':
         typeChecker = TypeChecker()
         typeChecker.visit(ast)
         if typeChecker.is_valid:
-            print "Type check finished"
             ast.accept(Interpreter())
-            print "Interpretation finished"
         else:
             sys.stderr.write("Type check failed -> no interpretation")
     else:

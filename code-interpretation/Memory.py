@@ -1,4 +1,6 @@
 
+FUNCTION_MEMORY_PREFIX = "function"
+
 
 class Memory(dict):
 
@@ -10,28 +12,29 @@ class Memory(dict):
 class MemoryStack(object):
                                                                              
     def __init__(self, memory=None):
-        self.stack = [memory if memory else Memory("base")]
+        self.stack = [memory if memory else Memory("default")]
 
-    def get(self, name):
+    def get(self, name, default=None):
         for memory in reversed(self.stack):
             if name in memory:
                 return memory[name]
+            elif memory.name.startswith(FUNCTION_MEMORY_PREFIX):
+                break
+        return default
 
     def insert(self, name, value):
-        self.stack[-1].put(name, value)
+        self.stack[-1][name] = value
 
     def set(self, name, value):
         for memory in reversed(self.stack):
             if name in memory:
                 memory[name] = value
-                break
+                return True
+            elif memory.name.startswith(FUNCTION_MEMORY_PREFIX):
+                return False
 
     def push(self, memory):
         self.stack.append(memory)
 
     def pop(self):
         return self.stack.pop()
-
-    @property
-    def head(self):
-        return self.stack[-1]

@@ -34,23 +34,23 @@ class NodeVisitor(object):
 
         return ttype
 
-    def visit(self, node):
+    def visit(self, node, **kwargs):
         method = 'visit_' + node.__class__.__name__
         visitor = getattr(self, method, self.generic_visit)
-        return visitor(node)
+        return visitor(node, **kwargs)
 
-    def generic_visit(self, node):        # Called if no explicit visitor function exists for a node.
+    def generic_visit(self, node, **kwargs):        # Called if no explicit visitor function exists for a node.
         if isinstance(node, list):
             for elem in node:
-                self.visit(elem)
+                self.visit(elem, **kwargs)
         else:
             for child in node.children:
                 if isinstance(child, list):
                     for item in child:
                         if isinstance(item, AST.Node):
-                            self.visit(item)
+                            self.visit(item, **kwargs)
                 elif isinstance(child, AST.Node):
-                    self.visit(child)
+                    self.visit(child, **kwargs)
 
     def get_type(self, operator, type_left, type_right):
         if operator not in self.ttype:
@@ -67,175 +67,223 @@ class NodeVisitor(object):
 
 class TypeChecker(NodeVisitor):
 
+    WHILE_SCOPE = 'while_instruction'
+    REPEAT_SCOPE = 'repeat_instruction'
+
+    LOOP_SCOPES = (WHILE_SCOPE, REPEAT_SCOPE)
+
     def __init__(self):
         super(TypeChecker, self).__init__()
 
         self.table = SymbolTable(None, 'root')
         self.current_function = None
         self.current_type = None
+        self.returned_type = None
 
-    def visit_Integer(self, node):
+    def visit_Integer(self, node, **kwargs):
         return 'int'
 
-    def visit_Float(self, node):
+    def visit_Float(self, node, **kwargs):
         return 'float'
 
-    def visit_String(self, node):
+    def visit_String(self, node, **kwargs):
         return 'string'
 
-    def visit_BinExpr(self, node):
+    def visit_BinExpr(self, node, **kwargs):
         type_left = self.visit(node.left)
         type_right = self.visit(node.right)
         operator = node.op
 
         result_type = self.get_type(operator, type_left, type_right)
 
-        if result_type is not None:
-            return result_type
+        if result_type is None:
+            print "Error: Illegal operation, {} {} {}: line {}".format(
+                type_left, node.op, type_right, node.line
+            )
+            return None
 
-        print "Bad expression {} in line {}".format(node.op, node.line)
+        return result_type
 
-    def visit_Variable(self, node):
+    def visit_Variable(self, node, **kwargs):
         symbol = self.table.get(node.name)
 
-        if symbol is not None:
-            return symbol.type
+        if symbol is None:
+            print "Error: Usage of undeclared variable '{}': line {}".format(
+                node.name, node.line
+            )
+            return None
 
-        print "Undefined symbol {} in line {}".format(node.name, node.line)
+        if isinstance(symbol, FunctionSymbol):
+            print "Error: Function identifier '{0}' used as a variable: line {1}".format(node.name, node.line)
 
-    def visit_AssignmentInstruction(self, node):
+        return symbol.type
+
+    def visit_AssignmentInstruction(self, node, **kwargs):
         symbol = self.table.get(node.id)
         expression_type = self.visit(node.expr)
 
         if symbol is None:
-            print "Used undefined symbol {} in line {}".format(node.id, node.line)
+            print "Error: Variable '{}' undefined in current scope: line {}".format(
+                node.id, node.line
+            )
         elif symbol.type == "float" and expression_type == "int":
             return symbol.type
-        elif expression_type != symbol.type:
-            print "Bad assignment of {} to {} in line {}.".format(expression_type, symbol.type, node.line)
+        elif expression_type and expression_type != symbol.type:
+            print "Error: Illegal assignment of {} to {}: line {}.".format(expression_type, symbol.type, node.line)
             return symbol.type
 
-    def visit_GroupedExpression(self, node):
+    def visit_GroupedExpression(self, node, **kwargs):
         return self.visit(node.interior)
 
-    def visit_FunctionExpression(self, node):
+    def visit_FunctionExpression(self, node, **kwargs):
         if self.table.symbols.get(node.name):
-            print "Function {} already defined. Line: {}".format(node.name, node.line)
+            print "Error: Redefinition of function '{}': line {}".format(node.name, node.line)
         else:
-            function = FunctionSymbol(node.name, node.retType)
+            function = FunctionSymbol(node.name, node.retType, node.args)
             self.table.put(node.name, function)
 
             self.table = self.table.push_scope(node.name)
             self.current_function = function
+            self.returned_type = None
 
             if node.args is not None:
                 self.visit(node.args)
-            self.visit(node.body)
+            self.visit(node.body, after_fun_def=True)
 
             self.current_function = None
             self.table = self.table.pop_scope()
 
-    def visit_CompoundInstruction(self, node):
-        self.table = self.table.push_scope("inner_scope")
+            if self.returned_type is None:
+                print "Error: Missing return statement in function '{}' returning {}: line {}".format(
+                    node.name, node.retType, node.line
+                )
+
+    def visit_CompoundInstruction(self, node, **kwargs):
+        after_fun_def = kwargs.get('after_fun_def')
+        if not after_fun_def:
+            self.table = self.table.push_scope("inner_scope")
 
         if node.declarations is not None:
             self.visit(node.declarations)
         self.visit(node.instructions)
 
-        self.table = self.table.pop_scope()
+        if not after_fun_def:
+            self.table = self.table.pop_scope()
 
-    def visit_ArgumentList(self, node):
+    def visit_ArgumentList(self, node, **kwargs):
         for arg in node.children:
             self.visit(arg)
 
-        self.current_function.params = [x.type for x in self.table.symbols.values()]
-
-    def visit_Argument(self, node):
+    def visit_Argument(self, node, **kwargs):
         if self.table.symbols.get(node.name) is not None:
-            print "Argument {} already defined. Line: {}".format(node.name, node.line)
+            print "Error: Variable '{}' already declared: line {}".format(node.name, node.line)
         else:
             self.table.put(node.name, VariableSymbol(node.name, node.type))
 
-    def visit_InvocationExpression(self, node):
+    def visit_InvocationExpression(self, node, **kwargs):
         function_symbol = self.table.get(node.name)
 
         if function_symbol is None or not isinstance(function_symbol, FunctionSymbol):
-            print "Function {} not defined. Line: {}".format(node.name, node.line)
+            print "Error: Call of undefined function '{}': line {}".format(node.name, node.line)
         else:
-            if len(node.args) != len(function_symbol.params):
-                print "Invalid number of arguments in line {}. Expected {}".\
-                    format(node.line, len(function_symbol.params))
+            if len(node.args) != len(function_symbol.args):
+                print "Error: Improper number of args in {} call: line {}".format(
+                    node.name, node.line
+                )
+
             else:
                 types = [self.visit(x) for x in node.args.children]
 
-                for actual, expected in zip(types, function_symbol.params):
-                    if actual != expected and not (actual == "int" and expected == "float"):
-                        print "Mismatching argument types in line {}. Expected {}, got {}".\
-                            format(node.line, expected, actual)
+                for actual, expected in zip(types, function_symbol.args):
+                    if actual != expected.type and not (actual == "int" and expected.type == "float"):
+                        print "Error: Improper type of args in {} call: line {}".format(node.name, node.line)
+                        break
 
             return function_symbol.type
 
-    def visit_ChoiceInstruction(self, node):
+    def visit_ChoiceInstruction(self, node, **kwargs):
         self.visit(node.condition)
         self.visit(node.action)
 
         if node.alternateAction is not None:
             self.visit(node.alternateAction)
 
-    def visit_WhileInstruction(self, node):
+    def visit_WhileInstruction(self, node, **kwargs):
         self.visit(node.condition)
+
+        self.table = self.table.push_scope(self.WHILE_SCOPE)
         self.visit(node.instruction)
+        self.table = self.table.pop_scope()
 
-    def visit_RepeatInstruction(self, node):
+    def visit_RepeatInstruction(self, node, **kwargs):
         self.visit(node.condition)
+
+        self.table = self.table.push_scope(self.REPEAT_SCOPE)
         self.visit(node.instructions)
+        self.table = self.table.pop_scope()
 
-    def visit_ReturnInstruction(self, node):
-        if self.current_function is not None:
-            expression_type = self.visit(node.expression)
+    def visit_ReturnInstruction(self, node, **kwargs):
+        if self.current_function is None:
+            print "Error: return instruction outside a function: line {}".format(node.line)
+            return None
 
-            if self.current_function.type == 'float' and expression_type == 'int':
-                return self.current_function.type
+        expression_type = self.visit(node.expression)
 
-            if expression_type != self.current_function.type:
-                print "Invalid return type of {} in line {}. Expected {}".format(expression_type, node.line,
-                                                                                 self.current_function.type)
-            return expression_type
+        if self.current_function.type == 'float' and expression_type == 'int':
+            return self.current_function.type
 
-        print "Return placed outside of a function in line {}".format(node.line)
+        if expression_type and expression_type != self.current_function.type:
+            print "Error: Improper returned type, expected {}, got {}: line {}".format(
+                self.current_function.type, expression_type, node.line
+            )
 
-    def visit_Declaration(self, node):
+        self.returned_type = expression_type
+        return expression_type
+
+    def visit_Declaration(self, node, **kwargs):
         self.current_type = node.type
         self.visit(node.inits)
         self.current_type = None
 
-    def visit_Init(self, node):
+    def visit_ContinueInstruction(self, node, **kwargs):
+        if not any(self.table.has_scope_name(name) for name in self.LOOP_SCOPES):
+            print "Error: continue instruction outside a loop: line {}".format(node.line)
+
+    def visit_BreakInstruction(self, node, **kwargs):
+        if not any(self.table.has_scope_name(name) for name in self.LOOP_SCOPES):
+            print "Error: break instruction outside a loop: line {}".format(node.line)
+
+    def visit_Init(self, node, **kwargs):
         expression_type = self.visit(node.expr)
+
+        definition = self.table.get(node.name)
+        if definition is not None and isinstance(definition, FunctionSymbol):
+            print "Error: Function identifier '{0}' used as a variable: line {1}".format(node.name, node.line)
+            return None
 
         if (expression_type == self.current_type or
                 (expression_type == "int" and self.current_type == "float") or
                 (expression_type == "float" and self.current_type == "int")):
 
             if self.table.symbols.get(node.name) is not None:
-                print "Invalid definition of {} in line: {}. Entity redefined".\
-                    format(node.name, node.line)
+                print "Error: Variable '{}' already declared: line {}".format(node.name, node.line)
             else:
                 self.table.put(node.name, VariableSymbol(node.name, self.current_type))
         else:
-            print "Bad assignment of {} to {} in line {}".format(expression_type, self.current_type, node.line)
+            print "Error: Assignment of {} to {}: line {}".format(expression_type, self.current_type, node.line)
 
-    def visit_PrintInstruction(self, node):
+    def visit_PrintInstruction(self, node, **kwargs):
         self.visit(node.expr)
 
-    def visit_LabeledInstruction(self, node):
+    def visit_LabeledInstruction(self, node, **kwargs):
         self.visit(node.instr)
 
-    def visit_Program(self, node):
+    def visit_Program(self, node, **kwargs):
         self.visit(node.program_blocks)
 
-    def visit_ProgramBlockList(self, node):
+    def visit_ProgramBlockList(self, node, **kwargs):
         for program_block in node.children:
             self.visit(program_block)
 
-    def visit_ProgramBlock(self, node):
+    def visit_ProgramBlock(self, node, **kwargs):
         self.visit(node.block)

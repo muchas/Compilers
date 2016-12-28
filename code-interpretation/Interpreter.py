@@ -1,4 +1,4 @@
-
+from operator import lshift, rshift, or_, and_, xor
 import AST
 import SymbolTable
 from Memory import *
@@ -12,7 +12,9 @@ sys.setrecursionlimit(10000)
 class Interpreter(object):
 
     def __init__(self):
-        self.memory = MemoryStack()
+        self.function_memory = MemoryStack()
+        self.global_memory = MemoryStack()
+        self.is_scope_local = False
 
     @on('node')
     def visit(self, node):
@@ -61,12 +63,30 @@ class Interpreter(object):
         r1 = node.left.accept(self)
         r2 = node.right.accept(self)
         operators = {
-            '+', '-', '/', '*', '>', '>=',
-            '<', '<=', '=='
+            '+': lambda a, b: a + b,
+            '-': lambda a, b: a - b,
+            '/': lambda a, b: a / b,
+            '*': lambda a, b: a * b,
+            '>': lambda a, b: a > b,
+            '>=': lambda a, b: a >= b,
+            '<': lambda a, b: a < b,
+            '<=': lambda a, b: a <= b,
+            '==': lambda a, b: a == b,
+            '%': lambda a, b: a % b,
+            '!=': lambda a, b: a != b,
+            '&&': lambda a, b: a and b,
+            '||': lambda a, b: a or b,
+            '<<': lshift,
+            '>>': rshift,
+            '|': or_,
+            '&': and_,
+            '^': xor,
         }
 
         if node.op in operators:
-            return eval('a {} b'.format(node.op), {"a": r1, "b": r2})
+            return operators[node.op](r1, r2)
+        else:
+            print("Binary operator {} is not defined".format(node.op))
 
     @when(AST.GroupedExpression)
     def visit(self, node):
@@ -74,7 +94,7 @@ class Interpreter(object):
 
     @when(AST.FunctionExpression)
     def visit(self, node):
-        self.memory.head[node.name] = node
+        self.global_memory.insert(node.name, node)
 
     @when(AST.Declaration)
     def visit(self, node):
@@ -83,13 +103,18 @@ class Interpreter(object):
     @when(AST.AssignmentInstruction)
     def visit(self, node):
         expression = node.expr.accept(self)
-        self.memory.set(node.id, expression)
+        if self.is_scope_local:
+            if not self.function_memory.set(node.id, expression):
+                self.global_memory.set(node.id, expression)
+        else:
+            self.global_memory.set(node.id, expression)
         return expression
 
     @when(AST.Init)
     def visit(self, node):
         expression = node.expr.accept(self)
-        self.memory.head[node.name] = expression
+        memory = self.function_memory if self.is_scope_local else self.global_memory
+        memory.insert(node.name, expression)
         return expression
 
     @when(AST.WhileInstruction)
@@ -107,12 +132,13 @@ class Interpreter(object):
         while True:
             try:
                 node.instructions.accept(self)
-                if node.condition.accept(self):  # PASCAL STYLE BEACH
+                if node.condition.accept(self):  # PASCAL STYLE
                     break
             except BreakException:
                 break
             except ContinueException:
-                pass
+                if node.condition.accept(self):  # PASCAL STYLE
+                    break
 
     @when(AST.ChoiceInstruction)
     def visit(self, node):
@@ -123,26 +149,42 @@ class Interpreter(object):
 
     @when(AST.CompoundInstruction)
     def visit(self, node):
-        node.declarations.accept(self)
-        node.instructions.accept(self)
+        was_local = self.is_scope_local
+        self.is_scope_local = True
+        self.function_memory.push(Memory('compound'))
+
+        try:
+            node.declarations.accept(self)
+            node.instructions.accept(self)
+        except ReturnValueException as e:
+            self.is_scope_local = was_local
+            self.function_memory.pop()
+            raise e
+
+        self.is_scope_local = was_local
+        self.function_memory.pop()
 
     @when(AST.InvocationExpression)
     def visit(self, node):
-        function = self.memory.get(node.name)
+        was_local = self.is_scope_local
+        function = self.global_memory.get(node.name)
 
-        function_memory = Memory(node.name)
+        memory = Memory("function")
 
         for expression, argument in zip(node.args.children, function.args.children):
-            function_memory[argument.accept(self)] = expression.accept(self)
+            memory[argument.accept(self)] = expression.accept(self)
 
-        self.memory.push(function_memory)
+        self.function_memory.push(memory)
+
+        self.is_scope_local = True
 
         try:
             function.body.accept(self)
         except ReturnValueException as e:
             return e.value
         finally:
-            self.memory.pop()
+            self.function_memory.pop()
+            self.is_scope_local = was_local
 
     @when(AST.Argument)
     def visit(self, node):
@@ -162,7 +204,9 @@ class Interpreter(object):
 
     @when(AST.Variable)
     def visit(self, node):
-        return self.memory.get(node.name)
+        if self.is_scope_local:
+            return self.function_memory.get(node.name, self.global_memory.get(node.name))
+        return self.global_memory.get(node.name)
 
     @when(AST.BreakInstruction)
     def visit(self, node):
@@ -182,5 +226,5 @@ class Interpreter(object):
 
     @when(AST.LabeledInstruction)
     def visit(self, node):
-        pass
+        return node.instr.accept(self)
 

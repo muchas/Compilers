@@ -5,7 +5,6 @@ from scanner import Scanner
 import AST
 
 
-
 class Cparser(object):
 
     def __init__(self):
@@ -31,7 +30,7 @@ class Cparser(object):
 
     def p_error(self, p):
         if p:
-            print("Syntax error at line {0}, column {1}: LexToken({2}, '{3}')".format(p.lineno(1), self.scanner.find_tok_column(p), p.type, p.value))
+            print("Syntax error at line {0}, column {1}: LexToken({2}, '{3}')".format(p.lineno, self.scanner.find_tok_column(p), p.type, p.value))
         else:
             print('End of input')
 
@@ -108,7 +107,7 @@ class Cparser(object):
                        | break_instr
                        | continue_instr
                        | compound_instr
-					   | expression"""
+					   | expression ';' """
         p[0] = p[1]
 
     def p_print_instr(self, p):
@@ -159,11 +158,11 @@ class Cparser(object):
 
     def p_continue_instr(self, p):
         """continue_instr : CONTINUE ';' """
-        p[0] = AST.ContinueInstruction()
+        p[0] = AST.ContinueInstruction(p.lineno(1))
 
     def p_break_instr(self, p):
         """break_instr : BREAK ';' """
-        p[0] = AST.BreakInstruction()
+        p[0] = AST.BreakInstruction(p.lineno(1))
 
     def p_compound_instr(self, p):
         """compound_instr : '{' declarations instructions '}' """
@@ -182,7 +181,7 @@ class Cparser(object):
         elif re.match(r"\d+", p[1]):
             p[0] = AST.Integer(p.lineno(1), p[1])
         else:
-            p[0] = AST.String(p.lineno(1), p[1])
+            p[0] = AST.String(p.lineno(1), p[1][1:-1])  # remove double quotes ""
 
     def p_expression_id(self, p):
         """expression : ID"""
@@ -249,7 +248,7 @@ class Cparser(object):
 
     def p_fundef(self, p):
         """fundef : TYPE ID '(' args_list_or_empty ')' compound_instr """
-        p[0] = AST.FunctionExpression(p[1], p[2], p[4], p[6])
+        p[0] = AST.FunctionExpression(p.lineno(1), p[1], p[2], p[4], p[6])
 
     def p_args_list(self, p):
         """args_list : args_list ',' arg

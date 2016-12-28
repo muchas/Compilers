@@ -17,6 +17,9 @@ class NodeList(Node):
     def __len__(self):
         return len(self.children)
 
+    def __iter__(self):
+        return iter(self.children)
+
 
 class Const(Node):
     def __init__(self, line, value):
@@ -64,7 +67,8 @@ class GroupedExpression(Node):
 
 
 class FunctionExpression(Node):
-    def __init__(self, retType, name, args, body):
+    def __init__(self, line, retType, name, args, body):
+        self.line = line
         self.retType = retType
         self.name = name
         self.args = args
@@ -104,9 +108,10 @@ class InitList(NodeList):
 
 
 class Init(Node):
-    def __init__(self, name, expr):
+    def __init__(self, line, name, expr):
         self.name = name
         self.expr = expr
+        self.line = line
 
 
 class InstructionList(NodeList):
@@ -164,11 +169,13 @@ class ReturnInstruction(Node):
 
 
 class BreakInstruction(Node):
-    pass
+    def __init__(self, line):
+        self.line = line
 
 
 class ContinueInstruction(Node):
-    pass
+    def __init__(self, line):
+        self.line = line
 
 
 class Program(Node):
